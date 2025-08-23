@@ -94,6 +94,15 @@ def get_optimizer(
         if 'warmup_init' not in optimizer_params:
             optimizer_params['warmup_init'] = False
         optimizer = Adafactor(params, lr=float(learning_rate), eps=1e-6, **optimizer_params)
+    elif lower_type == 'smmf':
+        from toolkit.optimizers.smmf import SMMF
+        optimizer = SMMF(params, lr=float(learning_rate), **optimizer_params)
+    elif lower_type == 'mlorc_adamw':
+        from toolkit.optimizers.mlorc import MLorc_AdamW
+        optimizer = MLorc_AdamW(params, lr=float(learning_rate), **optimizer_params)
+    elif lower_type == 'mlorc_prodigy':
+        from toolkit.optimizers.mlorc import MLorc_Prodigy
+        optimizer = MLorc_Prodigy(params, lr=float(learning_rate), **optimizer_params)
     elif lower_type == 'automagic':
         from toolkit.optimizers.automagic import Automagic
         optimizer = Automagic(params, lr=float(learning_rate), **optimizer_params)

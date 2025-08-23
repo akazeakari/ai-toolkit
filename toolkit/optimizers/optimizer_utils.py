@@ -164,6 +164,19 @@ def copy_stochastic(target: torch.Tensor, source: torch.Tensor, eps: Optional[fl
 
         update_parameter(target, result_float)
 
+def add_stochastic_(input: Tensor, other: Tensor, alpha: float = 1.0):
+    """
+    adds other to input using stochastic rounding
+
+    Args:
+        input: the input tensor with dtype=bfloat16
+        other: the other tensor
+        alpha: a multiplier for other
+    """
+    result = other.clone() if other.dtype == torch.float32 else other.to(dtype=torch.float32)
+
+    result.add_(input, alpha=alpha)
+    copy_stochastic(input, result)
 
 class Auto8bitTensor:
     def __init__(self, data: Tensor, *args, **kwargs):

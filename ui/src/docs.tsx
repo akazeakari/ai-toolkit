@@ -80,6 +80,17 @@ const docs: { [key: string]: ConfigDoc } = {
       </>
     ),
   },
+  'datasets.preserve_resolutions': {
+    title: 'Preserve Resolutions',
+    description: (
+      <>
+        This disables any kind of resizing or bucketing and will train your images at their original resolutions.
+        <br />
+        <br />
+        Any specified resolution settings will be ignored.
+      </>
+    ),
+  },
   'datasets.do_i2v': {
     title: 'Do I2V',
     description: (

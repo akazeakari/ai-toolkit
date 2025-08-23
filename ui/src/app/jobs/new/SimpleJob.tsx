@@ -650,6 +650,7 @@ export default function SimpleJob({
                               {resGroup.map(res => (
                                 <Checkbox
                                   key={res}
+                                  disabled={dataset.preserve_resolutions}
                                   label={res.toString()}
                                   checked={dataset.resolution.includes(res)}
                                   onChange={value => {
@@ -664,6 +665,12 @@ export default function SimpleJob({
                           ))}
                         </div>
                       </FormGroup>
+                      <Checkbox
+                        label="Preserve Resolutions"
+                        checked={dataset.preserve_resolutions}
+                        onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].preserve_resolutions`)}
+                        className="pt-2"
+                      />
                     </div>
                   </div>
                 </div>

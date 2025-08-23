@@ -838,6 +838,10 @@ class DatasetConfig:
 
         self.standardize_images: bool = kwargs.get('standardize_images', False)
 
+        self.preserve_resolutions: bool = kwargs.get(
+            "preserve_resolutions", False
+        )
+
         # https://albumentations.ai/docs/api_reference/augmentations/transforms
         # augmentations are returned as a separate image and cannot currently be cached
         self.augmentations: List[dict] = kwargs.get('augmentations', None)

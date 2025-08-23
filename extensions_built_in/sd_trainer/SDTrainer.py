@@ -84,6 +84,8 @@ class SDTrainer(BaseSDTrainProcess):
         self.cached_blank_embeds: Optional[PromptEmbeds] = None
         self.cached_trigger_embeds: Optional[PromptEmbeds] = None
         self.diff_output_preservation_embeds: Optional[PromptEmbeds] = None
+        # Cache for all dataset prompts when unloading text encoder
+        self.cached_prompt_embeds = {}
         
         self.dfe: Optional[DiffusionFeatureExtractor] = None
         self.unconditional_embeds = None
@@ -157,6 +159,34 @@ class SDTrainer(BaseSDTrainProcess):
                     'unconditional': negative
                 })
         
+
+    def cache_dataset_prompts(self):
+        """Cache all dataset prompts to CPU for VRAM optimization when unloading text encoder"""
+        print_acc("Caching dataset prompts...")
+        
+        # Ensure text encoder is on GPU
+        self.sd.text_encoder_to(self.device_torch)
+        
+        # Collect all unique prompts from datasets
+        unique_prompts = set()
+        for dataset in self.data_loader.datasets:
+            for item in dataset.dataset:
+                if hasattr(item, 'caption') and item.caption:
+                    unique_prompts.add(item.caption)
+        
+        print_acc(f"Found {len(unique_prompts)} unique prompts to cache")
+        
+        # Cache each unique prompt to CPU
+        with torch.no_grad():
+            for prompt in unique_prompts:
+                try:
+                    embed = self.sd.encode_prompt(prompt, long_prompts=self.do_long_prompts).detach()
+                    # Store on CPU to save VRAM
+                    self.cached_prompt_embeds[prompt] = embed.to('cpu')
+                except Exception as e:
+                    print_acc(f"Warning: Failed to cache prompt '{prompt[:50]}...': {str(e)}")
+        
+        print_acc(f"Successfully cached {len(self.cached_prompt_embeds)} prompt embeddings")
 
     def before_dataset_load(self):
         self.assistant_adapter = None
@@ -265,6 +295,7 @@ class SDTrainer(BaseSDTrainProcess):
                 else:
                     print_acc("This will train only with a blank prompt or trigger word, if set")
                     print_acc("If this is not what you want, remove the unload_text_encoder flag")
+                    print_acc("Will cache all dataset prompts before training")
                 print_acc("***********************************")
                 print_acc("")
                 self.sd.text_encoder_to(self.device_torch)
@@ -280,6 +311,10 @@ class SDTrainer(BaseSDTrainProcess):
                     self.diff_output_preservation_embeds = self.sd.encode_prompt(self.train_config.diff_output_preservation_class)
                 
                 self.cache_sample_prompts()
+                
+                # Cache all dataset prompts to CPU for VRAM optimization
+                if not self.is_caching_text_embeddings:
+                    self.cache_dataset_prompts()
 
                 # unload the text encoder
                 if self.is_caching_text_embeddings:
@@ -1386,16 +1421,38 @@ class SDTrainer(BaseSDTrainProcess):
                                     self.device_torch, dtype=dtype
                                 )
                             else:
-                                embeds_to_use = self.cached_blank_embeds.clone().detach().to(
-                                    self.device_torch, dtype=dtype
-                                )
-                                if self.cached_trigger_embeds is not None and not is_reg:
-                                    embeds_to_use = self.cached_trigger_embeds.clone().detach().to(
+                                # Use cached prompt embeddings instead of blank/trigger embeds
+                                if hasattr(self, 'cached_prompt_embeds') and len(self.cached_prompt_embeds) > 0:
+                                    # Use fully cached embeddings
+                                    batch_embeds = []
+                                    for prompt in conditioned_prompts:
+                                        if prompt in self.cached_prompt_embeds:
+                                            # Load from CPU to GPU when using
+                                            embed = self.cached_prompt_embeds[prompt].to(self.device_torch, dtype=dtype)
+                                            batch_embeds.append(embed)
+                                        else:
+                                            # Fallback: if prompt not found in cache (should not happen)
+                                            print_acc(f"WARNING: Prompt not found in cache: {prompt[:50]}...")
+                                            # Temporarily load text encoder
+                                            self.sd.text_encoder_to(self.device_torch)
+                                            embed = self.sd.encode_prompt(prompt, long_prompts=self.do_long_prompts).detach()
+                                            batch_embeds.append(embed.to(self.device_torch, dtype=dtype))
+                                            self.sd.text_encoder_to('cpu')
+                                            flush()
+                                    
+                                    conditional_embeds = concat_prompt_embeds(batch_embeds)
+                                else:
+                                    # Fallback to old method if cache not created
+                                    embeds_to_use = self.cached_blank_embeds.clone().detach().to(
                                         self.device_torch, dtype=dtype
                                     )
-                                conditional_embeds = concat_prompt_embeds(
-                                    [embeds_to_use] * noisy_latents.shape[0]
-                                )
+                                    if self.cached_trigger_embeds is not None and not is_reg:
+                                        embeds_to_use = self.cached_trigger_embeds.clone().detach().to(
+                                            self.device_torch, dtype=dtype
+                                        )
+                                    conditional_embeds = concat_prompt_embeds(
+                                        [embeds_to_use] * noisy_latents.shape[0]
+                                    )
                             if self.train_config.do_cfg:
                                 unconditional_embeds = self.cached_blank_embeds.clone().detach().to(
                                     self.device_torch, dtype=dtype

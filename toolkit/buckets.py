@@ -116,7 +116,7 @@ def get_bucket_for_image_size(
 
         new_width = int(width * scale)
         new_height = int(height * scale)
-
+        
         removed_pixels = (new_width - bucket["width"]) * new_height + (new_height - bucket["height"]) * new_width
 
         if removed_pixels < min_removed_pixels:

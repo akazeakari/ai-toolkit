@@ -17,6 +17,8 @@ export const defaultDatasetConfig: DatasetConfig = {
   num_frames: 1,
   do_i2v: true,
   preserve_resolutions: false,
+  flip_x: false,
+  flip_y: false,
 };
 
 export const defaultJobConfig: JobConfig = {
